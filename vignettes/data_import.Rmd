@@ -1,0 +1,158 @@
+---
+title: "Import dendrometer data"
+output: rmarkdown::html_vignette
+fig_caption: yes
+vignette: >
+  %\VignetteIndexEntry{Import dendrometer data}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+```{r, include = FALSE}
+library(dendrometeR)
+```
+
+The package `dendrometeR` provides functions to analyze dendrometer data using daily methods and a stem-cycle apprach (cf. Deslauriers et al. 2011). The package contains functions to fill gaps, to calculate daily statistics, to identify stem-cyclic phases and to analyze the processed dendrometer data in relation to environmental parameters. In addition, various plotting functions are provided.
+
+This vignette describes how dendrometer series should be formatted for use in `dendrometeR`, and how data formats can be checked.
+
+## Description of required data format
+
+For use in `dendrometeR`, input data should be formatted with a timestamp as row names and dendrometer series in columns. The timestamp should have the following date-time format: `%Y-%m-%d %H:%M:%S`. Missing values in the dendrometer series should be indicated with `NA`.
+
+Functions are designed for analyses on single growing seasons, amongst others because ARMA-based gap-filling routines will then perform best (i.e. ARMA parameters might be distinct for individual growing seasons). To allow the usage of `dendrometeR` for datasets from the Southern Hemisphere, various functions, however, allow to define two calendar years.
+
+
+## Transformation of dendrometer data
+This section illustrates the transformation of dendrometer data using the datasets `dmCDraw`, `dmHSraw` and `dmEDraw`, which come with `dendrometeR`, into the required input format. Also other possible data transformation issues are discussed.
+
+
+#### Example dmCD_raw
+The dataset `dmCDraw` presents an hourly dendrometer series for a \emph{Picea mariana} tree from Camp Daniel, Canada, for the year 2008. The raw data can be loaded with `data(dmCDraw)`, and looks as follows:
+
+```{r, echo = FALSE, results = 'asis'}
+data(dmCDraw)
+knitr::kable(head(dmCDraw, 5))
+```
+
+The data does not include a timestamp in the requested date-time format (`%Y-%m-%d %H:%M:%S`), but separate columns for year, month (M), day (D), hour (H) and second (S) instead. To transform these columns to a single timestamp, execute:
+
+```{r, eval = FALSE}
+dm.data <- data.frame(timestamp = ISOdate(year = dmCDraw$year, month = dmCDraw$Month,
+day = dmCDraw$Day, hour = dmCDraw$H, min = dmCDraw$M))
+```
+
+A new data frame is created with a timestamp in the first column. Now, the column with dendrometer data should be added to the data frame:
+
+```{r, eval = FALSE}
+dm.data$dendro <- dmCDraw$dendro
+```
+
+Finally, the timestamp column should be put as row names and deleted thereafter:
+
+```{r, eval = FALSE}
+rownames(dm.data) <- dm.data$timestamp
+dm.data$timestamp <- NULL
+```
+
+The output, also saved as `dmCD` within the package, looks as follows:
+
+```{r, echo = FALSE, results = 'asis'}
+data(dmCD)
+knitr::kable(head(dmCD, 5))
+```
+
+
+#### Example dmHS_raw
+The dataset `dmHSraw` presents a half-hourly dendrometer series for a \emph{Fagus sylvatica} tree from the monitoring plot Hinnensee, Germany, for the year 2012. The raw data can be loaded with `data(dmHSraw)`, and looks as follows:
+
+```{r, echo = FALSE, results = 'asis'}
+data(dmHSraw)
+knitr::kable(head(dmHSraw, 5))
+```
+
+Although the data contains a timestamp, it is recommended to check this timestamp before putting it as row names, e.g. to avoid problems with daylight savings. Superfluous columns (i.e. DOY, YEAR) are excluded in the transformation process.
+
+```{r, eval = FALSE}
+dm.data <- data.frame(timestamp = as.POSIXct(strptime(dmHSraw$TIMESTAMP, '%Y-%m-%d %H:%M:%S'), tz = "GMT"))
+```
+
+A new data frame is created with a timestamp in the first column. Now, the column with dendrometer data should be added to the data frame:
+
+```{r, eval = FALSE}
+dm.data$dBUP2 <- dmHSraw$dBUP2
+```
+
+Finally, the timestamp column should be put as row names and deleted thereafter:
+
+```{r, eval = FALSE}
+rownames(dm.data) <- dm.data$timestamp
+dm.data$timestamp <- NULL
+```
+
+
+#### Example dmED_raw
+The dataset `dmEDraw` presents a half-hourly dendrometer series for two \emph{Fagus sylvatica} trees from the monitoring plot Eldena, Germany, for the year 2015. The raw data can be loaded with `data(dmEDraw)`, and looks as follows:
+
+```{r, echo = FALSE, results = 'asis'}
+data(dmEDraw)
+knitr::kable(head(dmEDraw, 5))
+```
+
+Although the data contains a timestamp, it is recommended to check this timestamp before putting it as row names, e.g. to avoid problems with daylight savings.
+
+```{r, eval = FALSE}
+dm.data <- data.frame(timestamp = as.POSIXct(strptime(dmEDraw$TIMESTAMP, '%Y-%m-%d %H:%M:%S'), tz = "GMT"))
+```
+
+A new data frame is created with a timestamp in the first column. Now, the columns with the two dendrometer series should be added to the data frame:
+
+```{r, eval = FALSE}
+# option 1: select series by typing column names:
+dm.data[,c("Beech03","Beech04")] <- dmEDraw[,c(2,3)]
+
+# option 2: select series from the character vector produced by names:
+dm.data[,names(dmEDraw)[c(2,3)]] <- dmEDraw[,c(2,3)]
+```
+
+In case of multiple dendrometer series in consecutive columns, the use of a multicolon `:` might be advantageous:
+
+```{r, eval = FALSE}
+dm.data[,names(dmEDraw)[2:3]] <- dmEDraw[,2:3]
+```
+
+Finally, the timestamp column should be put as row names and deleted thereafter:
+
+```{r, eval = FALSE}
+rownames(dm.data) <- dm.data$timestamp
+dm.data$timestamp <- NULL
+```
+
+## Checking format and resolution of input data
+The function `is.dendro` checks whether the input dendrometer data is in the required format. It returns `TRUE` when the data is well-formatted, and `FALSE` if not. In the latter case, specific error messages on the nature of the problem (e.g., problems with timestamp, non-numeric data etc.) will be returned as well. See the following examples:
+
+```{r}
+is.dendro(dmCDraw)
+is.dendro(dmCD)
+```
+
+The temporal resolution of the dendrometer data can be checked using the function `dendro.resolution`. The output defaults to seconds, but can be specified in other units (mins", "hours", "days"):
+
+```{r}
+dendro.resolution(dmCD)
+dendro.resolution(dmCD, unts = "hours")
+```
+
+The function `is.na` (base package) can be used to check whether dendrometer series contain gaps as follows:
+
+```{r}
+TRUE %in% is.na(dmCD)
+data(dmED)
+TRUE %in% is.na(dmED)
+```
+
+If `TRUE` is returned the data contains gaps, and if `FALSE` not. 
+
+## References
+
+Deslauriers, A., Rossi, S., Turcotte, A., Morin, H. and Krause, C. (2011) A three-step procedure in SAS to analyze the time series from automatic dendrometers. *Dendrochronologia* **29**: 151-161.
